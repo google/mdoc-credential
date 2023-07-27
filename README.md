@@ -8,6 +8,8 @@ This repository contains a library that offers support for ISO 18013-5 mdoc via
 The library contains support for both providing and requesting credentials, and the example app
 does both.
 
+Releases are distributed through [Google Maven](https://maven.google.com/web/index.html?q=mdoc#com.google.android.mdoc:mdoc-credential).
+
 ### Relying Party
 
 In order for an app to request a mdoc credential, it needs to create a `GetCredentialRequest` for
