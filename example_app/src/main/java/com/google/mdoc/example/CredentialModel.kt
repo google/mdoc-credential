@@ -85,8 +85,9 @@ class CredentialModel(private val context: Context) {
                 )
         }
 
+        val mdocCred = MdocCredential.createFrom(cred)
         val cborBytes =
-            hpke.decrypt(MdocCredential.createFrom(cred).encryptedData, handoverBytes)
+            hpke.decrypt(mdocCred.encryptedData, mdocCred.encapsulatedKey, handoverBytes)
         values.value = CborUtils.extractIssuerNamespacedElements(cborBytes)
     }
 }

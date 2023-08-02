@@ -55,6 +55,8 @@ class MdocHpkeTest {
 
         val hpke = MdocHpke(keyPair)
 
-        assertThat(hpke.decrypt(hpke.encrypt(plainText, aad), aad)).isEqualTo(plainText)
+        val (cipherText, encapKey) = hpke.encrypt(plainText, aad)
+
+        assertThat(hpke.decrypt(cipherText, encapKey, aad)).isEqualTo(plainText)
     }
 }
