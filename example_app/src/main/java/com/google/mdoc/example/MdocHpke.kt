@@ -211,6 +211,13 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
                 .add(BROWSER_HANDOVER_V1)
                 .add(nonce)
                 .add(origin.toByteArray())
+                .startMap() // OriginInfo
+                .put("cat", 1)
+                .put("type", 1)
+                .putMap("details")
+                .put("baseUrl", origin)
+                .end() // OriginInfo Details
+                .end() // OriginInfo
                 .add(generatePublicKeyHash(publicKey))
                 .end()
                 .end()
