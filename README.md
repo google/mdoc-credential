@@ -43,8 +43,8 @@ selections in the `CredentialManager` picker UI. It may be useful to include a m
 of elements here to ensure that a credential request is successful. Of course, it's also fine to
 use the same set of elements for both.  
   
-A successful request returns a `MdocCredential`, which itself simply contains the HPKE-encrypted
-`DeviceResponse` CBOR. The example app contains some code to do HPKE via
+A successful request returns a `MdocCredential`, which itself contains the HPKE-encrypted
+`DeviceResponse` CBOR and the encapsulated sender key. The example app contains some code to do HPKE via
 [Tink](https://developers.google.com/tink) and uses [cbor-java](https://github.com/c-rack/cbor-java)
 to parse the `DeviceResponse`. This code or variants of it may find their way into the
 `identity-credential` project eventually.  

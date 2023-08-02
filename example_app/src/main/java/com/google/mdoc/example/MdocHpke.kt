@@ -20,19 +20,40 @@ package com.google.mdoc.example
 import co.nstant.`in`.cbor.CborBuilder
 import co.nstant.`in`.cbor.CborEncoder
 import co.nstant.`in`.cbor.model.SimpleValue
-import com.google.crypto.tink.*
+import com.google.crypto.tink.HybridDecrypt
+import com.google.crypto.tink.HybridEncrypt
+import com.google.crypto.tink.InsecureSecretKeyAccess
+import com.google.crypto.tink.KeysetHandle
+import com.google.crypto.tink.TinkProtoKeysetFormat
 import com.google.crypto.tink.config.TinkConfig
 import com.google.crypto.tink.hybrid.HybridConfig
-import com.google.crypto.tink.proto.*
+import com.google.crypto.tink.proto.HpkeAead
+import com.google.crypto.tink.proto.HpkeKdf
+import com.google.crypto.tink.proto.HpkeKem
+import com.google.crypto.tink.proto.HpkeParams
+import com.google.crypto.tink.proto.HpkePrivateKey
+import com.google.crypto.tink.proto.HpkePublicKey
+import com.google.crypto.tink.proto.KeyData
+import com.google.crypto.tink.proto.KeyStatusType
+import com.google.crypto.tink.proto.Keyset
+import com.google.crypto.tink.proto.OutputPrefixType
 import com.google.crypto.tink.shaded.protobuf.ByteString
 import com.google.crypto.tink.subtle.EllipticCurves
 import java.io.ByteArrayOutputStream
+import java.security.AlgorithmParameters
+import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECParameterSpec
+import java.security.spec.ECPublicKeySpec
+import java.security.spec.InvalidKeySpecException
+import java.security.spec.InvalidParameterSpecException
 
 
 class MdocHpke(private val publicKey: PublicKey, private val privateKey: PrivateKey? = null) {
@@ -44,6 +65,10 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         private const val ANDROID_HANDOVER_V1 = "AndroidHandoverv1"
         private const val BROWSER_HANDOVER_V1 = "BrowserHandoverv1"
         private const val PRIMARY_KEY_ID = 1
+        private const val ENCAPSULATED_KEY_LENGTH = 65
+
+        private const val EC_ALGORITHM = "EC"
+        private const val EC_CURVE = "secp256r1"
     }
 
     constructor(keyPair: KeyPair) : this(keyPair.public, keyPair.private)
@@ -83,7 +108,7 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         val publicKeysetKey = Keyset.Key.newBuilder()
             .setKeyId(PRIMARY_KEY_ID)
             .setKeyData(publicKeyData)
-            .setOutputPrefixType(OutputPrefixType.TINK)
+            .setOutputPrefixType(OutputPrefixType.RAW)
             .setStatus(KeyStatusType.ENABLED)
             .build()
 
@@ -113,7 +138,7 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
             val privateKeysetKey = Keyset.Key.newBuilder()
                 .setKeyId(PRIMARY_KEY_ID)
                 .setKeyData(privateKeyData)
-                .setOutputPrefixType(OutputPrefixType.TINK)
+                .setOutputPrefixType(OutputPrefixType.RAW)
                 .setStatus(KeyStatusType.ENABLED)
                 .build()
             val privateKeyset = Keyset.newBuilder()
@@ -127,15 +152,24 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         }
     }
 
-    fun encrypt(plainText: ByteArray, aad: ByteArray): ByteArray {
+    fun encrypt(plainText: ByteArray, aad: ByteArray): Pair<ByteArray, ECPublicKey> {
         val encryptor = publicKeysetHandle.getPrimitive(HybridEncrypt::class.java)
-        return encryptor.encrypt(plainText, aad)
+
+        val output = encryptor.encrypt(plainText, aad)
+
+        val encapsulatedKeyBytes = output.sliceArray(0 until ENCAPSULATED_KEY_LENGTH)
+        val encapsulatedKey = decodePublicKey(encapsulatedKeyBytes)
+
+        val encryptedData = output.sliceArray(ENCAPSULATED_KEY_LENGTH until output.size)
+
+        return Pair(encryptedData, encapsulatedKey)
     }
 
-    fun decrypt(cipherText: ByteArray, aad: ByteArray): ByteArray {
+    fun decrypt(cipherText: ByteArray, encapsulatedKey: ECPublicKey, aad: ByteArray): ByteArray {
         check(privateKeysetHandle != null)
+
         val decryptor = privateKeysetHandle!!.getPrimitive(HybridDecrypt::class.java)
-        return decryptor.decrypt(cipherText, aad)
+        return decryptor.decrypt(encodePublicKey(encapsulatedKey) + cipherText, aad)
     }
 
     private fun generatePublicKeyHash(publicKey: PublicKey): ByteArray {
@@ -150,18 +184,54 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         return md.digest(encodedKey)
     }
 
-//    SessionTranscript = [
-//      null, // DeviceEngagementBytes not available
-//      null, // EReaderKeyBytes not available
-//      AndroidHandover // defined below
-//    ]
-//
-//    AndroidHandover = [
-//      "AndroidHandoverv1", // Version number
-//      nonce, // nonce that comes from request
-//      appId, // RP package name
-//      pkRHash, // The SHA256 hash of the recipient public key.
-//    ]
+    private fun encodePublicKey(publicKey: ECPublicKey): ByteArray = EllipticCurves.pointEncode(
+        EllipticCurves.CurveType.NIST_P256,
+        EllipticCurves.PointFormatType.UNCOMPRESSED,
+        publicKey.w
+    )
+
+    private fun decodePublicKey(encoded: ByteArray): ECPublicKey {
+        val w = EllipticCurves.pointDecode(
+            EllipticCurves.CurveType.NIST_P256,
+            EllipticCurves.PointFormatType.UNCOMPRESSED,
+            encoded
+        )
+
+        var paramSpec: ECParameterSpec? = null
+        paramSpec = try {
+            val algorithmParameters =
+                AlgorithmParameters.getInstance(EC_ALGORITHM)
+            algorithmParameters.init(ECGenParameterSpec(EC_CURVE))
+            algorithmParameters.getParameterSpec(ECParameterSpec::class.java)
+        } catch (e: InvalidParameterSpecException) {
+            throw RuntimeException(e)
+        } catch (e: NoSuchAlgorithmException) {
+            throw RuntimeException(e)
+        }
+
+        return try {
+            val factory =
+                KeyFactory.getInstance(EC_ALGORITHM)
+            factory.generatePublic(ECPublicKeySpec(w, paramSpec)) as ECPublicKey
+        } catch (e: NoSuchAlgorithmException) {
+            throw RuntimeException(e)
+        } catch (e: InvalidKeySpecException) {
+            throw RuntimeException(e)
+        }
+    }
+
+    //    SessionTranscript = [
+    //      null, // DeviceEngagementBytes not available
+    //      null, // EReaderKeyBytes not available
+    //      AndroidHandover // defined below
+    //    ]
+    //
+    //    AndroidHandover = [
+    //      "AndroidHandoverv1", // Version number
+    //      nonce, // nonce that comes from request
+    //      appId, // RP package name
+    //      pkRHash, // The SHA256 hash of the recipient public key.
+    //    ]
     fun generateAndroidSessionTranscript(
         nonce: ByteArray,
         publicKey: PublicKey,
@@ -185,22 +255,26 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         return baos.toByteArray()
     }
 
-//    SessionTranscript = [
-//      null, // DeviceEngagementBytes not available
-//      null, // EReaderKeyBytes not available
-//      AndroidHandover // defined below
-//    ]
-//
-//    From https://github.com/WICG/mobile-document-request-api
-//
-//    BrowserHandover = [
-//      "BrowserHandoverv1",
-//      nonce,
-//      OriginInfoBytes, // origin of the request as defined in ISO/IEC 18013-7
-//      RequesterIdentity,
-//      pkRHash
-//    ]
-    fun generateBrowserSessionTranscript(nonce: ByteArray, origin: String, publicKey: PublicKey): ByteArray {
+    //    SessionTranscript = [
+    //      null, // DeviceEngagementBytes not available
+    //      null, // EReaderKeyBytes not available
+    //      AndroidHandover // defined below
+    //    ]
+    //
+    //    From https://github.com/WICG/mobile-document-request-api
+    //
+    //    BrowserHandover = [
+    //      "BrowserHandoverv1",
+    //      nonce,
+    //      OriginInfoBytes, // origin of the request as defined in ISO/IEC 18013-7
+    //      RequesterIdentity,
+    //      pkRHash
+    //    ]
+    fun generateBrowserSessionTranscript(
+        nonce: ByteArray,
+        origin: String,
+        publicKey: PublicKey
+    ): ByteArray {
         val baos = ByteArrayOutputStream()
         CborEncoder(baos).encode(
             CborBuilder()

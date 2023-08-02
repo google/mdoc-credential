@@ -25,6 +25,10 @@ import com.google.common.truth.Truth.assertThat
 import kotlin.random.Random
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import java.security.interfaces.ECPublicKey
+import java.security.spec.ECGenParameterSpec
 import java.util.Arrays
 
 @RunWith(AndroidJUnit4::class)
@@ -32,28 +36,41 @@ import java.util.Arrays
 class MdocCredentialTest {
 
     private val randomBytes = Random(0).nextBytes(256)
+    private val encapsulatedKey: ECPublicKey
+
+    init {
+        val kpg = KeyPairGenerator.getInstance("EC")
+        kpg.initialize(
+            ECGenParameterSpec("secp256r1"), SecureRandom()
+        )
+        encapsulatedKey = kpg.generateKeyPair().public as ECPublicKey
+    }
 
     @Test
     fun constructor_success() {
-        MdocCredential(randomBytes)
+        MdocCredential(randomBytes, encapsulatedKey)
     }
 
     @Test
     fun getter_mdocData_success() {
-        val expectedEncryptedData = randomBytes
-        val mdocCredential = MdocCredential(expectedEncryptedData)
-        assertThat(mdocCredential.encryptedData).isEqualTo(expectedEncryptedData)
+        val mdocCredential = MdocCredential(randomBytes, encapsulatedKey)
+        assertThat(mdocCredential.encryptedData).isEqualTo(randomBytes)
+        assertThat(mdocCredential.encapsulatedKey).isEqualTo(encapsulatedKey)
     }
 
     @Test
     fun getter_frameworkProperties() {
         val expectedEncryptedData = randomBytes
+        val expectedEncapsulatedKey = encapsulatedKey
         val expectedData = Bundle()
         expectedData.putByteArray(
             MdocCredential.BUNDLE_KEY_CREDENTIAL_DATA, expectedEncryptedData
         )
+        expectedData.putSerializable(
+            MdocCredential.BUNDLE_KEY_ENCAPSULATED_KEY, expectedEncapsulatedKey
+        )
 
-        val mdocCredential = MdocCredential(expectedEncryptedData)
+        val mdocCredential = MdocCredential(expectedEncryptedData, encapsulatedKey)
 
         assertThat(mdocCredential.type).isEqualTo(
             MdocCredential.TYPE_MDOC_CREDENTIAL
@@ -63,11 +80,13 @@ class MdocCredentialTest {
 
     @Test
     fun createFrom_success() {
-        val credential = MdocCredential(randomBytes)
+        val credential = MdocCredential(randomBytes, encapsulatedKey)
 
         val convertedCredential = MdocCredential.createFrom(credential)
         assertThat(convertedCredential.encryptedData)
             .isEqualTo(credential.encryptedData)
+        assertThat(convertedCredential.encapsulatedKey)
+            .isEqualTo(credential.encapsulatedKey)
     }
 
     @Test

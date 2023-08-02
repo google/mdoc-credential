@@ -113,8 +113,9 @@ class GetCredentialActivity : ComponentActivity() {
             )
         }
 
+        val (encryptedData, encapKey) = hpke.encrypt(TestVectors.ISO_18013_5_ANNEX_D_DEVICE_RESPONSE, handoverBytes)
         val credential =
-            MdocCredential(hpke.encrypt(TestVectors.ISO_18013_5_ANNEX_D_DEVICE_RESPONSE, handoverBytes))
+            MdocCredential(encryptedData, encapKey)
         val response = GetCredentialResponse(credential)
 
         val result = Intent()

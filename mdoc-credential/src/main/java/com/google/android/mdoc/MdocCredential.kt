@@ -19,10 +19,12 @@ package com.google.android.mdoc
 import android.os.Bundle
 import androidx.annotation.VisibleForTesting
 import androidx.credentials.CustomCredential
+import java.security.interfaces.ECPublicKey
 
 class MdocCredential constructor(
-    val encryptedData: ByteArray
-) : CustomCredential(TYPE_MDOC_CREDENTIAL, toBundle(encryptedData)) {
+    val encryptedData: ByteArray,
+    val encapsulatedKey: ECPublicKey
+) : CustomCredential(TYPE_MDOC_CREDENTIAL, toBundle(encryptedData, encapsulatedKey)) {
     companion object {
         const val TYPE_MDOC_CREDENTIAL = "com.google.android.mdoc.TYPE_MDOC_CREDENTIAL"
 
@@ -32,17 +34,26 @@ class MdocCredential constructor(
         internal const val BUNDLE_KEY_CREDENTIAL_DATA =
             "com.google.android.mdoc.BUNDLE_KEY_MDOC_CREDENTIAL_DATA"
 
+        @VisibleForTesting
+        internal const val BUNDLE_KEY_ENCAPSULATED_KEY =
+            "com.google.android.mdoc.BUNDLE_KEY_ENCAPSULATED_KEY"
+
         private fun isMdocCredential(customCredential: CustomCredential): Boolean = customCredential.type == TYPE_MDOC_CREDENTIAL
 
         @JvmStatic
+        @Suppress("Deprecated")
         fun createFrom(customCredential: CustomCredential): MdocCredential {
-            check(isMdocCredential(customCredential)) { "Not an mdoc credential" }
-            return MdocCredential(customCredential.data.getByteArray(BUNDLE_KEY_CREDENTIAL_DATA)!!)
+            check(isMdocCredential(customCredential)) { "Not a mdoc credential" }
+            return MdocCredential(
+                customCredential.data.getByteArray(BUNDLE_KEY_CREDENTIAL_DATA)!!,
+                customCredential.data.getSerializable(BUNDLE_KEY_ENCAPSULATED_KEY) as ECPublicKey
+            )
         }
 
-        internal fun toBundle(data: ByteArray): Bundle {
+        internal fun toBundle(encryptedData: ByteArray, encapsulatedKey: ECPublicKey): Bundle {
             val bundle = Bundle()
-            bundle.putByteArray(BUNDLE_KEY_CREDENTIAL_DATA, data)
+            bundle.putByteArray(BUNDLE_KEY_CREDENTIAL_DATA, encryptedData)
+            bundle.putSerializable(BUNDLE_KEY_ENCAPSULATED_KEY, encapsulatedKey)
             return bundle
         }
     }
