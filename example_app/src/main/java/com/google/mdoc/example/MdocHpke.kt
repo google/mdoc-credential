@@ -19,8 +19,7 @@ package com.google.mdoc.example
 
 import co.nstant.`in`.cbor.CborBuilder
 import co.nstant.`in`.cbor.CborEncoder
-import co.nstant.`in`.cbor.model.MajorType
-import co.nstant.`in`.cbor.model.ByteString as CborByteString
+import co.nstant.`in`.cbor.model.SimpleValue
 import com.google.crypto.tink.*
 import com.google.crypto.tink.config.TinkConfig
 import com.google.crypto.tink.hybrid.HybridConfig
@@ -172,8 +171,8 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         CborEncoder(baos).encode(
             CborBuilder()
                 .startArray() // SessionTranscript
-                // FIXME: should we add null values for DeviceEngagementBytes and EReaderKeyBytes?
-                // cbor-java does not support the NULL type
+                .add(SimpleValue.NULL) // DeviceEngagementBytes
+                .add(SimpleValue.NULL) // EReaderKeyBytes
                 .startArray() // AndroidHandover
                 .add(ANDROID_HANDOVER_V1)
                 .add(nonce)
@@ -206,7 +205,8 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         CborEncoder(baos).encode(
             CborBuilder()
                 .startArray() // SessionTranscript
-                // FIXME: should we add null values for DeviceEngagementBytes and EReaderKeyBytes?
+                .add(SimpleValue.NULL) // DeviceEngagementBytes
+                .add(SimpleValue.NULL) // EReaderKeyBytes
                 .startArray() // BrowserHandover
                 .add(BROWSER_HANDOVER_V1)
                 .add(nonce)
