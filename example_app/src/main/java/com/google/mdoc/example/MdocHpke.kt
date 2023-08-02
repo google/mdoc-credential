@@ -255,6 +255,23 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         return baos.toByteArray()
     }
 
+    private fun generateOriginInfoBytes(origin: String): ByteArray {
+        val baos = ByteArrayOutputStream()
+        CborEncoder(baos).encode(
+            CborBuilder()
+                .startMap()
+                .put("cat", 1)
+                .put("type", 1)
+                .putMap("details")
+                .put("baseUrl", origin)
+                .end()
+                .end()
+                .build()
+        )
+
+        return baos.toByteArray()
+    }
+
     //    SessionTranscript = [
     //      null, // DeviceEngagementBytes not available
     //      null, // EReaderKeyBytes not available
@@ -275,6 +292,8 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         origin: String,
         publicKey: PublicKey
     ): ByteArray {
+        val originInfoBytes = generateOriginInfoBytes(origin)
+
         val baos = ByteArrayOutputStream()
         CborEncoder(baos).encode(
             CborBuilder()
@@ -284,14 +303,7 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
                 .startArray() // BrowserHandover
                 .add(BROWSER_HANDOVER_V1)
                 .add(nonce)
-                .add(origin.toByteArray())
-                .startMap() // OriginInfo
-                .put("cat", 1)
-                .put("type", 1)
-                .putMap("details")
-                .put("baseUrl", origin)
-                .end() // OriginInfo Details
-                .end() // OriginInfo
+                .add(originInfoBytes)
                 .add(generatePublicKeyHash(publicKey))
                 .end()
                 .end()
