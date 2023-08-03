@@ -240,10 +240,10 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         val baos = ByteArrayOutputStream()
         CborEncoder(baos).encode(
             CborBuilder()
-                .startArray() // SessionTranscript
+                .addArray() // SessionTranscript
                 .add(SimpleValue.NULL) // DeviceEngagementBytes
                 .add(SimpleValue.NULL) // EReaderKeyBytes
-                .startArray() // AndroidHandover
+                .addArray() // AndroidHandover
                 .add(ANDROID_HANDOVER_V1)
                 .add(nonce)
                 .add(packageName.toByteArray())
@@ -259,7 +259,7 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         val baos = ByteArrayOutputStream()
         CborEncoder(baos).encode(
             CborBuilder()
-                .startMap()
+                .addMap()
                 .put("cat", 1)
                 .put("type", 1)
                 .putMap("details")
@@ -284,7 +284,7 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
     //      "BrowserHandoverv1",
     //      nonce,
     //      OriginInfoBytes, // origin of the request as defined in ISO/IEC 18013-7
-    //      RequesterIdentity,
+    //      RequesterIdentity, // ? (omitting)
     //      pkRHash
     //    ]
     fun generateBrowserSessionTranscript(
@@ -297,10 +297,10 @@ class MdocHpke(private val publicKey: PublicKey, private val privateKey: Private
         val baos = ByteArrayOutputStream()
         CborEncoder(baos).encode(
             CborBuilder()
-                .startArray() // SessionTranscript
+                .addArray() // SessionTranscript
                 .add(SimpleValue.NULL) // DeviceEngagementBytes
                 .add(SimpleValue.NULL) // EReaderKeyBytes
-                .startArray() // BrowserHandover
+                .addArray() // BrowserHandover
                 .add(BROWSER_HANDOVER_V1)
                 .add(nonce)
                 .add(originInfoBytes)

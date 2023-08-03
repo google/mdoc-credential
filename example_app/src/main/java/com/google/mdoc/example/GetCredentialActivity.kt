@@ -100,7 +100,7 @@ class GetCredentialActivity : ComponentActivity() {
 
     fun respondWithCredential() {
         val hpke = MdocHpke(mdocOption.publicKey)
-        val handoverBytes = when (mdocOption.handover) {
+        val sessionTranscriptBytes = when (mdocOption.handover) {
             MdocHandover.ANDROID -> hpke.generateAndroidSessionTranscript(
                 nonce = mdocOption.nonce,
                 publicKey = mdocOption.publicKey,
@@ -113,7 +113,7 @@ class GetCredentialActivity : ComponentActivity() {
             )
         }
 
-        val (encryptedData, encapKey) = hpke.encrypt(TestVectors.ISO_18013_5_ANNEX_D_DEVICE_RESPONSE, handoverBytes)
+        val (encryptedData, encapKey) = hpke.encrypt(TestVectors.ISO_18013_5_ANNEX_D_DEVICE_RESPONSE, sessionTranscriptBytes)
         val credential =
             MdocCredential(encryptedData, encapKey)
         val response = GetCredentialResponse(credential)
