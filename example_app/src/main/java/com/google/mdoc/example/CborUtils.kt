@@ -48,10 +48,10 @@ class CborUtils {
                 val value = decoded[0]["elementValue"]
 
                 if (value.majorType == MajorType.BYTE_STRING) {
-                    continue
+                    result[identifier] = "<bytes>";
+                } else {
+                    result[identifier] = value.toString()
                 }
-
-                result[identifier] = value.toString()
             }
 
             return result
