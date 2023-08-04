@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
             MdocCredentialElement("expiry_date", MdocCredentialElement.NAMESPACE_MDL),
             MdocCredentialElement("document_number", MdocCredentialElement.NAMESPACE_MDL),
             MdocCredentialElement("driving_privileges", MdocCredentialElement.NAMESPACE_MDL),
+            MdocCredentialElement("portrait", MdocCredentialElement.NAMESPACE_MDL),
         )
     }
 
