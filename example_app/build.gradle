@@ -12,7 +12,7 @@ plugins {
 
 android {
     namespace 'com.google.mdoc.example'
-    compileSdkPreview "UpsideDownCake"
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.google.mdoc.example"
