@@ -149,6 +149,8 @@ class GetMdocCredentialOptionTest {
     @Test
     @SdkSuppress(minSdkVersion = Build.VERSION_CODES.O)
     fun getter_frameworkProperties_success() {
+        GetMdocCredentialOption.needSeparateRequestElements = false
+
         val expectedCriticalElements = criticalElements.map {
             it.namespace + ":" + it.name
         }.toMutableSet()
@@ -191,6 +193,73 @@ class GetMdocCredentialOptionTest {
             GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
             expectedRequestElements.toCollection(ArrayList())
         )
+
+        val option = GetMdocCredentialOption(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate
+        )
+
+        assertThat(option.type).isEqualTo(MdocCredential.TYPE_MDOC_CREDENTIAL)
+        assertContains(expectedRequestData, option.requestData)
+        assertContains(expectedCandidateData, option.candidateQueryData)
+        assertThat(option.isSystemProviderRequired).isFalse()
+        assertThat(option.isAutoSelectAllowed).isTrue()
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = Build.VERSION_CODES.O)
+    fun getter_frameworkProperties_success_separateRequestElements() {
+        GetMdocCredentialOption.needSeparateRequestElements = true
+
+        val expectedCriticalElements = criticalElements.map {
+            it.namespace + ":" + it.name
+        }.toMutableSet()
+        val expectedRequestElements = requestedElements.map {
+            it.namespace + ":" + it.name
+        }.toMutableSet()
+
+        expectedCriticalElements.add(MdocCredential.DOCUMENT_TYPE_MDL)
+        expectedRequestElements.add(MdocCredential.DOCUMENT_TYPE_MDL)
+
+        val expectedCandidateData = Bundle()
+        expectedCandidateData.putByteArray(GetMdocCredentialOption.BUNDLE_KEY_NONCE, nonce)
+        expectedCandidateData.putSerializable(
+            GetMdocCredentialOption.BUNDLE_KEY_PUBLIC_KEY, publicKey
+        )
+        expectedCandidateData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
+            expectedCriticalElements.toCollection(ArrayList())
+        )
+        expectedCandidateData.putString(
+            GetMdocCredentialOption.BUNDLE_KEY_DOCUMENT_TYPE,
+            MdocCredential.DOCUMENT_TYPE_MDL
+        )
+        expectedCandidateData.putString(
+            GetMdocCredentialOption.BUNDLE_KEY_HANDOVER_TYPE, MdocHandover.ANDROID.name
+        )
+        expectedCandidateData.putInt(
+            GetMdocCredentialOption.BUNDLE_KEY_RETENTION, retentionInDays
+        )
+        expectedCandidateData.putSerializable(
+            GetMdocCredentialOption.BUNDLE_KEY_CLIENT_CERT, clientCertificate
+        )
+        expectedCandidateData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
+            expectedCriticalElements.toCollection(ArrayList())
+        )
+
+        expectedCandidateData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_REQUESTED_ELEMENTS,
+            expectedRequestElements.toCollection(ArrayList())
+        )
+
+        val expectedRequestData = expectedCandidateData.deepCopy()
 
         val option = GetMdocCredentialOption(
             nonce = nonce,

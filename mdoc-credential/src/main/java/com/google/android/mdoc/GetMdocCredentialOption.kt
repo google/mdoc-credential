@@ -16,8 +16,10 @@
 
 package com.google.android.mdoc
 
+import android.os.Build
 import android.os.Bundle
 import androidx.annotation.RestrictTo
+import androidx.annotation.VisibleForTesting
 import androidx.credentials.GetCustomCredentialOption
 import java.security.PublicKey
 import java.security.cert.Certificate
@@ -34,22 +36,26 @@ class GetMdocCredentialOption @JvmOverloads constructor(
 ) : GetCustomCredentialOption(
     type = MdocCredential.TYPE_MDOC_CREDENTIAL,
     requestData = toRequestDataBundle(
-        nonce,
-        publicKey,
-        requestedElements,
-        documentType,
-        handover,
-        retentionInDays,
-        clientCertificate
+        nonce = nonce,
+        publicKey = publicKey,
+        candidateElementKeys = criticalElements,
+        requestedElementKeys = requestedElements,
+        documentType = documentType,
+        handover = handover,
+        retentionInDays = retentionInDays,
+        clientCertificate = clientCertificate,
+        isCandidateBundle = false
     ),
     candidateQueryData = toRequestDataBundle(
-        nonce,
-        publicKey,
-        criticalElements,
-        documentType,
-        handover,
-        retentionInDays,
-        clientCertificate
+        nonce = nonce,
+        publicKey = publicKey,
+        candidateElementKeys = criticalElements,
+        requestedElementKeys = requestedElements,
+        documentType = documentType,
+        handover = handover,
+        retentionInDays = retentionInDays,
+        clientCertificate = clientCertificate,
+        isCandidateBundle = true
     ),
     isSystemProviderRequired = false,
     isAutoSelectAllowed = true,
@@ -74,28 +80,45 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             "com.google.android.mdoc.BUNDLE_KEY_MDOC_RETENTION"
         internal const val BUNDLE_KEY_CLIENT_CERT =
             "com.google.android.mdoc.BUNDLE_KEY_MDOC_CLIENT_CERT"
+        internal const val BUNDLE_KEY_REQUESTED_ELEMENTS =
+            "com.google.android.mdoc.BUNDLE_KEY_REQUESTED_ELEMENTS"
 
         private const val ELEMENT_DELIMITER = ":"
 
         internal fun toRequestDataBundle(
             nonce: ByteArray,
             publicKey: PublicKey,
-            elementKeys: Set<MdocCredentialElement>,
+            candidateElementKeys: Set<MdocCredentialElement>,
+            requestedElementKeys: Set<MdocCredentialElement>,
             documentType: String,
             handover: MdocHandover,
             retentionInDays: Int,
-            clientCertificate: Certificate?
+            clientCertificate: Certificate?,
+            isCandidateBundle: Boolean
         ): Bundle {
             val bundle = Bundle()
 
-            val elements = flattenElements(documentType, elementKeys)
+            val candidateElements = flattenElements(documentType, candidateElementKeys)
+            val requestedElements = flattenElements(documentType, requestedElementKeys)
 
             bundle.putByteArray(BUNDLE_KEY_NONCE, nonce)
             bundle.putSerializable(BUNDLE_KEY_PUBLIC_KEY, publicKey)
 
-            bundle.putStringArrayList(
-                BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS, elements
-            )
+            if (isCandidateBundle or needSeparateRequestElements) {
+                bundle.putStringArrayList(
+                    BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS, candidateElements
+                )
+            } else {
+                bundle.putStringArrayList(
+                    BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS, requestedElements
+                )
+            }
+
+            if (needSeparateRequestElements) {
+                bundle.putStringArrayList(
+                    BUNDLE_KEY_REQUESTED_ELEMENTS, requestedElements
+                )
+            }
 
             bundle.putString(BUNDLE_KEY_DOCUMENT_TYPE, documentType)
             bundle.putString(BUNDLE_KEY_HANDOVER_TYPE, handover.name)
@@ -105,7 +128,17 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             return bundle
         }
 
-        fun flattenElements(documentType: String, elements: Set<MdocCredentialElement>): ArrayList<String> {
+        // Instead of putting candidate and request elements in the candidate and request
+        // bundles, we need to send them separately due to a CredentialManager bug where it uses
+        // the request bundle for the candidate selection.
+        @VisibleForTesting
+        internal var needSeparateRequestElements =
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+
+        fun flattenElements(
+            documentType: String,
+            elements: Set<MdocCredentialElement>
+        ): ArrayList<String> {
             val list = elements.mapTo(ArrayList()) {
                 it.namespace + ELEMENT_DELIMITER + it.name
             }
@@ -119,10 +152,12 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             keys.forEach {
                 val splitElement = it.split(ELEMENT_DELIMITER)
                 if (splitElement.size > 1) {
-                    result.add(MdocCredentialElement(
-                        name = splitElement[1],
-                        namespace = splitElement[0]
-                    ))
+                    result.add(
+                        MdocCredentialElement(
+                            name = splitElement[1],
+                            namespace = splitElement[0]
+                        )
+                    )
                 }
             }
 
@@ -134,7 +169,10 @@ class GetMdocCredentialOption @JvmOverloads constructor(
                 "Not an mdoc request"
             }
 
-            return createFrom(customCredentialOption.requestData, customCredentialOption.candidateQueryData)
+            return createFrom(
+                customCredentialOption.requestData,
+                customCredentialOption.candidateQueryData
+            )
         }
 
         @RestrictTo(RestrictTo.Scope.LIBRARY)
@@ -146,11 +184,19 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             val publicKey = requestBundle.getSerializable(BUNDLE_KEY_PUBLIC_KEY) as PublicKey?
             checkNotNull(publicKey) { "public key cannot be null" }
 
-            val requestedElements = unflattenElements(
-                checkNotNull(
-                    requestBundle.getStringArrayList(BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS)
+            val requestedElements = if (needSeparateRequestElements) {
+                unflattenElements(
+                    checkNotNull(
+                        requestBundle.getStringArrayList(BUNDLE_KEY_REQUESTED_ELEMENTS)
+                    )
                 )
-            )
+            } else {
+                unflattenElements(
+                    checkNotNull(
+                        requestBundle.getStringArrayList(BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS)
+                    )
+                )
+            }
 
             val criticalElements = unflattenElements(
                 checkNotNull(

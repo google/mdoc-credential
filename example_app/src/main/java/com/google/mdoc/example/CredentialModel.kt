@@ -44,7 +44,11 @@ class CredentialModel(private val context: Context) {
         return kpg.generateKeyPair()
     }
 
-    suspend fun requestCredential(elements: Set<MdocCredentialElement>, origin: String? = null) {
+    suspend fun requestCredential(
+        criticalElements: Set<MdocCredentialElement>,
+        requestedElements: Set<MdocCredentialElement>,
+        origin: String? = null
+    ) {
         val nonce = ByteArray(12)
         SecureRandom().nextBytes(nonce)
 
@@ -57,9 +61,9 @@ class CredentialModel(private val context: Context) {
             nonce = nonce,
             publicKey = publicKey,
             documentType = MdocCredential.DOCUMENT_TYPE_MDL,
-            requestedElements = elements,
-            criticalElements = elements,
-            retentionInDays = GetMdocCredentialOption.RETENTION_NONE
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            retentionInDays = GetMdocCredentialOption.RETENTION_NONE,
         )
 
         val request = GetCredentialRequest(listOf(option))
