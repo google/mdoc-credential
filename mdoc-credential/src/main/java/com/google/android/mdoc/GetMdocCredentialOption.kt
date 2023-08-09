@@ -16,13 +16,14 @@
 
 package com.google.android.mdoc
 
+import android.os.Build
 import android.os.Bundle
 import androidx.annotation.RestrictTo
 import androidx.credentials.GetCustomCredentialOption
 import java.security.PublicKey
 import java.security.cert.Certificate
 
-class GetMdocCredentialOption @JvmOverloads constructor(
+class GetMdocCredentialOption internal constructor(
     val nonce: ByteArray,
     val publicKey: PublicKey,
     val documentType: String,
@@ -31,25 +32,28 @@ class GetMdocCredentialOption @JvmOverloads constructor(
     val handover: MdocHandover = MdocHandover.ANDROID,
     val retentionInDays: Int = RETENTION_FOREVER,
     val clientCertificate: Certificate? = null,
+    swapRequestAndCandidateElements: Boolean = false,
 ) : GetCustomCredentialOption(
     type = MdocCredential.TYPE_MDOC_CREDENTIAL,
     requestData = toRequestDataBundle(
         nonce,
         publicKey,
-        requestedElements,
+        if (swapRequestAndCandidateElements) criticalElements else requestedElements,
         documentType,
         handover,
         retentionInDays,
-        clientCertificate
+        clientCertificate,
+        swapRequestAndCandidateElements
     ),
     candidateQueryData = toRequestDataBundle(
         nonce,
         publicKey,
-        criticalElements,
+        if (swapRequestAndCandidateElements) requestedElements else criticalElements,
         documentType,
         handover,
         retentionInDays,
-        clientCertificate
+        clientCertificate,
+        swapRequestAndCandidateElements
     ),
     isSystemProviderRequired = false,
     isAutoSelectAllowed = true,
@@ -74,8 +78,37 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             "com.google.android.mdoc.BUNDLE_KEY_MDOC_RETENTION"
         internal const val BUNDLE_KEY_CLIENT_CERT =
             "com.google.android.mdoc.BUNDLE_KEY_MDOC_CLIENT_CERT"
+        internal const val BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED =
+            "com.google.android.mdoc.BUNDLE_KEY_SWAP_REQUEST_CANDIDATE"
 
         private const val ELEMENT_DELIMITER = ":"
+
+        internal fun needSwapRequestAndCandidateElements() =
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+
+        @JvmOverloads
+        @JvmStatic
+        fun create(
+            nonce: ByteArray,
+            publicKey: PublicKey,
+            documentType: String,
+            requestedElements: Set<MdocCredentialElement> = emptySet(),
+            criticalElements: Set<MdocCredentialElement> = emptySet(),
+            handover: MdocHandover = MdocHandover.ANDROID,
+            retentionInDays: Int = RETENTION_FOREVER,
+            clientCertificate: Certificate? = null,
+        ): GetMdocCredentialOption =
+            GetMdocCredentialOption(
+                nonce = nonce,
+                publicKey = publicKey,
+                documentType = documentType,
+                requestedElements = requestedElements,
+                criticalElements = criticalElements,
+                handover = handover,
+                retentionInDays = retentionInDays,
+                clientCertificate = clientCertificate,
+                swapRequestAndCandidateElements = needSwapRequestAndCandidateElements()
+            )
 
         internal fun toRequestDataBundle(
             nonce: ByteArray,
@@ -84,7 +117,8 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             documentType: String,
             handover: MdocHandover,
             retentionInDays: Int,
-            clientCertificate: Certificate?
+            clientCertificate: Certificate?,
+            isRequestAndCandidateSwapped: Boolean
         ): Bundle {
             val bundle = Bundle()
 
@@ -101,6 +135,7 @@ class GetMdocCredentialOption @JvmOverloads constructor(
             bundle.putString(BUNDLE_KEY_HANDOVER_TYPE, handover.name)
             bundle.putInt(BUNDLE_KEY_RETENTION, retentionInDays)
             bundle.putSerializable(BUNDLE_KEY_CLIENT_CERT, clientCertificate)
+            bundle.putBoolean(BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED, isRequestAndCandidateSwapped)
 
             return bundle
         }
@@ -176,15 +211,19 @@ class GetMdocCredentialOption @JvmOverloads constructor(
                 BUNDLE_KEY_CLIENT_CERT
             ) as Certificate?
 
+            val isRequestAndCandidateSwapped = requestBundle.getBoolean(
+                BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED)
+
             return GetMdocCredentialOption(
                 nonce = nonce,
                 publicKey = publicKey,
-                requestedElements = requestedElements,
-                criticalElements = criticalElements,
+                requestedElements = if (isRequestAndCandidateSwapped) criticalElements else requestedElements,
+                criticalElements = if (isRequestAndCandidateSwapped) requestedElements else criticalElements,
                 documentType = documentType,
                 handover = handover,
                 retentionInDays = retentionInDays,
-                clientCertificate = clientCertificate
+                clientCertificate = clientCertificate,
+                swapRequestAndCandidateElements = isRequestAndCandidateSwapped
             )
         }
     }

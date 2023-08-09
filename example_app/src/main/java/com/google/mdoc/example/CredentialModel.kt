@@ -44,7 +44,11 @@ class CredentialModel(private val context: Context) {
         return kpg.generateKeyPair()
     }
 
-    suspend fun requestCredential(elements: Set<MdocCredentialElement>, origin: String? = null) {
+    suspend fun requestCredential(
+        criticalElements: Set<MdocCredentialElement>,
+        requestedElements: Set<MdocCredentialElement>,
+        origin: String? = null
+    ) {
         val nonce = ByteArray(12)
         SecureRandom().nextBytes(nonce)
 
@@ -52,14 +56,14 @@ class CredentialModel(private val context: Context) {
         val hpke = MdocHpke(publicKey, keyPair.private)
         val handover = if (origin != null) MdocHandover.BROWSER else MdocHandover.ANDROID
 
-        val option = GetMdocCredentialOption(
+        val option = GetMdocCredentialOption.create(
             handover = handover,
             nonce = nonce,
             publicKey = publicKey,
             documentType = MdocCredential.DOCUMENT_TYPE_MDL,
-            requestedElements = elements,
-            criticalElements = elements,
-            retentionInDays = GetMdocCredentialOption.RETENTION_NONE
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            retentionInDays = GetMdocCredentialOption.RETENTION_NONE,
         )
 
         val request = GetCredentialRequest(listOf(option))

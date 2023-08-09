@@ -23,8 +23,10 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.filters.SmallTest
 import com.google.android.mdoc.TestUtils.Companion.assertContains
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.runners.Parameterized.Parameters
 import java.io.ByteArrayInputStream
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
@@ -125,7 +127,7 @@ class GetMdocCredentialOptionTest {
     }
 
     @Test
-    fun constructor_success_allArguments() {
+    fun constructor_success_allArguments_noSwap() {
         val option = GetMdocCredentialOption(
             nonce = nonce,
             publicKey = publicKey,
@@ -134,7 +136,8 @@ class GetMdocCredentialOptionTest {
             criticalElements = criticalElements,
             handover = MdocHandover.ANDROID,
             retentionInDays = retentionInDays,
-            clientCertificate = clientCertificate
+            clientCertificate = clientCertificate,
+            swapRequestAndCandidateElements = false
         )
         assertThat(option.nonce).isSameInstanceAs(nonce)
         assertThat(option.publicKey).isSameInstanceAs(publicKey)
@@ -147,8 +150,76 @@ class GetMdocCredentialOptionTest {
     }
 
     @Test
+    fun constructor_success_allArguments_swap() {
+        val option = GetMdocCredentialOption(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate,
+        )
+        assertThat(option.nonce).isSameInstanceAs(nonce)
+        assertThat(option.publicKey).isSameInstanceAs(publicKey)
+        assertThat(option.documentType).isEqualTo(MdocCredential.DOCUMENT_TYPE_MDL)
+        assertThat(option.criticalElements).isSameInstanceAs(criticalElements)
+        assertThat(option.requestedElements).isSameInstanceAs(requestedElements)
+        assertThat(option.handover).isEqualTo(MdocHandover.ANDROID)
+        assertThat(option.retentionInDays).isEqualTo(retentionInDays)
+        assertThat(option.clientCertificate).isSameInstanceAs(clientCertificate)
+    }
+
+    @Test
+    fun create_success() {
+        val option = GetMdocCredentialOption.create(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate
+        )
+
+        assertThat(option.nonce).isSameInstanceAs(nonce)
+        assertThat(option.publicKey).isSameInstanceAs(publicKey)
+        assertThat(option.documentType).isEqualTo(MdocCredential.DOCUMENT_TYPE_MDL)
+        assertThat(option.criticalElements).isSameInstanceAs(criticalElements)
+        assertThat(option.requestedElements).isSameInstanceAs(requestedElements)
+        assertThat(option.handover).isEqualTo(MdocHandover.ANDROID)
+        assertThat(option.retentionInDays).isEqualTo(retentionInDays)
+        assertThat(option.clientCertificate).isSameInstanceAs(clientCertificate)
+    }
+
+    @Test
+    fun create_success_swapOnAndroidU() {
+        assumeTrue(GetMdocCredentialOption.needSwapRequestAndCandidateElements())
+
+        assertThat(Build.VERSION.SDK_INT).isEqualTo(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+
+        val option = GetMdocCredentialOption.create(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate
+        )
+
+        assertThat(option.requestData.getBoolean(GetMdocCredentialOption.BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED)).isTrue()
+
+        assertThat(option.requestedElements).isEqualTo(requestedElements)
+        assertThat(option.criticalElements).isEqualTo(criticalElements)
+    }
+
+    @Test
     @SdkSuppress(minSdkVersion = Build.VERSION_CODES.O)
-    fun getter_frameworkProperties_success() {
+    fun getter_frameworkProperties_noSwap() {
         val expectedCriticalElements = criticalElements.map {
             it.namespace + ":" + it.name
         }.toMutableSet()
@@ -185,6 +256,10 @@ class GetMdocCredentialOptionTest {
             GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
             expectedCriticalElements.toCollection(ArrayList())
         )
+        expectedCandidateData.putBoolean(
+            GetMdocCredentialOption.BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED,
+            false
+        )
 
         val expectedRequestData = expectedCandidateData.deepCopy()
         expectedRequestData.putStringArrayList(
@@ -200,12 +275,85 @@ class GetMdocCredentialOptionTest {
             criticalElements = criticalElements,
             handover = MdocHandover.ANDROID,
             retentionInDays = retentionInDays,
-            clientCertificate = clientCertificate
+            clientCertificate = clientCertificate,
+            swapRequestAndCandidateElements = false
         )
 
         assertThat(option.type).isEqualTo(MdocCredential.TYPE_MDOC_CREDENTIAL)
         assertContains(expectedRequestData, option.requestData)
         assertContains(expectedCandidateData, option.candidateQueryData)
+        assertThat(option.isSystemProviderRequired).isFalse()
+        assertThat(option.isAutoSelectAllowed).isTrue()
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = Build.VERSION_CODES.O)
+    fun getter_frameworkProperties_swap() {
+        val expectedCriticalElements = criticalElements.map {
+            it.namespace + ":" + it.name
+        }.toMutableSet()
+        val expectedRequestElements = requestedElements.map {
+            it.namespace + ":" + it.name
+        }.toMutableSet()
+
+        expectedCriticalElements.add(MdocCredential.DOCUMENT_TYPE_MDL)
+        expectedRequestElements.add(MdocCredential.DOCUMENT_TYPE_MDL)
+
+        val expectedCandidateData = Bundle()
+        expectedCandidateData.putByteArray(GetMdocCredentialOption.BUNDLE_KEY_NONCE, nonce)
+        expectedCandidateData.putSerializable(
+            GetMdocCredentialOption.BUNDLE_KEY_PUBLIC_KEY, publicKey
+        )
+        expectedCandidateData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
+            expectedCriticalElements.toCollection(ArrayList())
+        )
+        expectedCandidateData.putString(
+            GetMdocCredentialOption.BUNDLE_KEY_DOCUMENT_TYPE,
+            MdocCredential.DOCUMENT_TYPE_MDL
+        )
+        expectedCandidateData.putString(
+            GetMdocCredentialOption.BUNDLE_KEY_HANDOVER_TYPE, MdocHandover.ANDROID.name
+        )
+        expectedCandidateData.putInt(
+            GetMdocCredentialOption.BUNDLE_KEY_RETENTION, retentionInDays
+        )
+        expectedCandidateData.putSerializable(
+            GetMdocCredentialOption.BUNDLE_KEY_CLIENT_CERT, clientCertificate
+        )
+        expectedCandidateData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
+            expectedCriticalElements.toCollection(ArrayList())
+        )
+        expectedCandidateData.putBoolean(
+            GetMdocCredentialOption.BUNDLE_KEY_REQUEST_CANDIDATE_SWAPPED,
+            true
+        )
+
+        val expectedRequestData = expectedCandidateData.deepCopy()
+        expectedRequestData.putStringArrayList(
+            GetMdocCredentialOption.BUNDLE_KEY_SUPPORTED_ELEMENT_KEYS,
+            expectedRequestElements.toCollection(ArrayList())
+        )
+
+        val option = GetMdocCredentialOption(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate,
+            swapRequestAndCandidateElements = true
+        )
+
+        assertThat(option.type).isEqualTo(MdocCredential.TYPE_MDOC_CREDENTIAL)
+
+        // These are intentionally swapped.
+        assertContains(expectedRequestData, option.candidateQueryData)
+        assertContains(expectedCandidateData, option.requestData)
+
         assertThat(option.isSystemProviderRequired).isFalse()
         assertThat(option.isAutoSelectAllowed).isTrue()
     }
@@ -223,7 +371,36 @@ class GetMdocCredentialOptionTest {
             criticalElements = criticalElements,
             handover = MdocHandover.ANDROID,
             retentionInDays = retentionInDays,
-            clientCertificate = clientCertificate
+            clientCertificate = clientCertificate,
+            swapRequestAndCandidateElements = false
+        )
+
+        val convertedOption = GetMdocCredentialOption.createFrom(option)
+        assertThat(convertedOption.nonce).isEqualTo(option.nonce)
+        assertThat(convertedOption.publicKey.encoded).isEqualTo(option.publicKey.encoded)
+        assertThat(convertedOption.criticalElements).isEqualTo(expectedCriticalElements)
+        assertThat(convertedOption.requestedElements).isEqualTo(expectedRequestedElements)
+        assertThat(convertedOption.documentType).isEqualTo(option.documentType)
+        assertThat(convertedOption.handover).isEqualTo(option.handover)
+        assertThat(convertedOption.retentionInDays).isEqualTo(option.retentionInDays)
+        assertThat(convertedOption.clientCertificate).isEqualTo(option.clientCertificate)
+    }
+
+    @Test
+    fun createFrom_success_swapped() {
+        val expectedCriticalElements = criticalElements
+        val expectedRequestedElements = requestedElements
+
+        val option = GetMdocCredentialOption(
+            nonce = nonce,
+            publicKey = publicKey,
+            documentType = MdocCredential.DOCUMENT_TYPE_MDL,
+            requestedElements = requestedElements,
+            criticalElements = criticalElements,
+            handover = MdocHandover.ANDROID,
+            retentionInDays = retentionInDays,
+            clientCertificate = clientCertificate,
+            swapRequestAndCandidateElements = true
         )
 
         val convertedOption = GetMdocCredentialOption.createFrom(option)

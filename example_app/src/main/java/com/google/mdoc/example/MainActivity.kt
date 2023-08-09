@@ -121,12 +121,19 @@ fun RequestCredButton(model: CredentialModel) {
     val context = LocalContext.current
 
     // Request all of the elements that we have registered
-    val elements = MainActivity.SUPPORTED_ELEMENTS
+    val requestedElements = MainActivity.SUPPORTED_ELEMENTS
+
+    // Anything with family_name will be offered as a choice
+    val criticalElements =
+        setOf(MdocCredentialElement("family_name", MdocCredentialElement.NAMESPACE_MDL))
 
     Button(onClick = {
         scope.launch {
             try {
-                model.requestCredential(elements)
+                model.requestCredential(
+                    criticalElements = criticalElements,
+                    requestedElements = requestedElements
+                )
             } catch (e: Exception) {
                 Log.e(MainActivity.LOGTAG, "Failed to request credential", e)
                 Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()

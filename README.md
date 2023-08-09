@@ -17,7 +17,7 @@ use with `CredentialManager` (via the [Jetpack library](https://developer.androi
 straightforward:
 
 ```kotlin
-val option = GetMdocCredentialOption(
+val option = GetMdocCredentialOption.create(
     handover = MdocHandover.ANDROID,
     nonce = nonce,
     publicKey = publicKey,
